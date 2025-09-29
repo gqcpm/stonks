@@ -97,8 +97,12 @@ def process_time_series_data(data, frequency):
     
     return df
 
-def create_price_chart(df, symbol, frequency):
-    """Create an interactive price chart"""
+def calculate_moving_average(df, window):
+    """Calculate moving average for the given window"""
+    return df['Close'].rolling(window=window).mean()
+
+def create_price_chart(df, symbol, frequency, indicator="None"):
+    """Create an interactive price chart with optional indicators"""
     fig = go.Figure()
     
     # Add candlestick chart
@@ -110,6 +114,18 @@ def create_price_chart(df, symbol, frequency):
         close=df['Close'],
         name=f"{symbol} {frequency.title()}"
     ))
+    
+    # Add technical indicators
+    if indicator == "50 Day Moving Average":
+        # Calculate 50-day moving average
+        ma_50 = calculate_moving_average(df, 50)
+        fig.add_trace(go.Scatter(
+            x=df.index,
+            y=ma_50,
+            mode='lines',
+            name='50 Day MA',
+            line=dict(color='orange', width=2)
+        ))
     
     fig.update_layout(
         title=f"{symbol} {frequency.title()} Price Data",
@@ -154,6 +170,13 @@ def main():
             help="Choose the frequency of data points"
         )
         
+        indicator = st.selectbox(
+            "Technical Indicator",
+            options=["None", "50 Day Moving Average"],
+            index=0,  # Default to None
+            help="Choose a technical indicator to overlay on the price chart"
+        )
+        
         st.markdown("---")
         st.markdown("### About")
         st.markdown("This app fetches time series data from Alpha Vantage API and displays it with interactive charts.")
@@ -194,7 +217,7 @@ def main():
                     
                     # Create charts
                     st.subheader("📊 Price Chart")
-                    price_chart = create_price_chart(df, symbol, frequency)
+                    price_chart = create_price_chart(df, symbol, frequency, indicator)
                     st.plotly_chart(price_chart, use_container_width=True)
                     
                     st.subheader("📊 Volume Chart")
