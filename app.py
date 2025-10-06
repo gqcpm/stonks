@@ -6,6 +6,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
+from strategies import quality_low_volatility
 
 # Load environment variables
 load_dotenv()
@@ -101,6 +102,18 @@ def calculate_moving_average(df, window):
     """Calculate moving average for the given window"""
     return df['Close'].rolling(window=window).mean()
 
+def generate_trading_recommendation(df, strategy, symbol="Unknown"):
+    """Generate trading recommendation based on selected strategy"""
+    if strategy == "Quality/Low Volatility":
+        try:
+            # Use the implemented quality_low_volatility strategy
+            return quality_low_volatility(df, symbol)
+        except Exception as e:
+            st.warning(f"Strategy calculation error: {str(e)}")
+            return "Hold"
+    
+    return "Hold"  # Default recommendation
+
 def create_price_chart(df, symbol, frequency, indicator="None"):
     """Create an interactive price chart with optional indicators"""
     fig = go.Figure()
@@ -177,6 +190,13 @@ def main():
             help="Choose a technical indicator to overlay on the price chart"
         )
         
+        trading_strategy = st.selectbox(
+            "Trading Strategy",
+            options=["Quality/Low Volatility"],
+            index=0,  # Default to Quality/Low Volatility
+            help="Choose a trading strategy for generating buy/sell/hold recommendations"
+        )
+        
         st.markdown("---")
         st.markdown("### About")
         st.markdown("This app fetches time series data from Alpha Vantage API and displays it with interactive charts.")
@@ -200,8 +220,11 @@ def main():
                 if df is not None and not df.empty:
                     st.success(f"✅ Successfully fetched {len(df)} {frequency} data points for {symbol}")
                     
+                    # Generate trading recommendation
+                    recommendation = generate_trading_recommendation(df, trading_strategy, symbol)
+                    
                     # Display basic statistics
-                    col1, col2, col3 = st.columns(3)
+                    col1, col2, col3, col4 = st.columns(4)
                     
                     with col1:
                         price_change = df['Close'].iloc[-1] - df['Close'].iloc[-2] if len(df) > 1 else 0
@@ -212,6 +235,15 @@ def main():
                     
                     with col3:
                         st.metric("Lowest Price", f"${df['Low'].min():.2f}")
+                    
+                    with col4:
+                        # Color code the recommendation
+                        if recommendation == "Buy":
+                            st.metric("Recommendation", recommendation, delta_color="normal")
+                        elif recommendation == "Sell":
+                            st.metric("Recommendation", recommendation, delta_color="inverse")
+                        else:
+                            st.metric("Recommendation", recommendation, delta_color="off")
                     
                     st.markdown("---")
                     
