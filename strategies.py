@@ -13,7 +13,7 @@ def get_sentiment_score_for_date(ticker, date, api_key=None):
         ticker (str): Stock ticker symbol
         date (str): Date in YYYY-MM-DD format
         api_key (str): Alpha Vantage API key (optional, will use environment variable if not provided)
-    
+
     Returns:
         float: Average sentiment score (-1 to 1, where 1 is most positive)
     """
@@ -82,7 +82,7 @@ def _get_date_for_frequency(date, frequency):
     Args:
         date: Date object
         frequency (str): Time series frequency ("daily", "weekly", "monthly")
-    
+
     Returns:
         str: Formatted date string for API call
     """
@@ -103,7 +103,65 @@ def _get_progress_interval(frequency):
     """Get progress reporting interval based on frequency."""
     return {"daily": 10, "weekly": 5, "monthly": 3}.get(frequency, 10)
 
-def get_sentiment_scores_by_frequency(ticker, df, frequency, api_key=None):
+def _generate_fake_sentiment_data(ticker, df, frequency):
+    """
+    Generate realistic fake sentiment data for testing purposes.
+    
+    Args:
+        ticker (str): Stock ticker symbol
+        df (pd.DataFrame): DataFrame with datetime index
+        frequency (str): Time series frequency ("daily", "weekly", "monthly")
+    
+    Returns:
+        pd.Series: Fake sentiment scores indexed by date
+    """
+    import random
+    
+    # Set seed for reproducible fake data
+    random.seed(hash(ticker) % 1000)
+    
+    unique_dates = df.index.date
+    sentiment_scores = []
+    
+    # Generate realistic sentiment patterns
+    for i, date in enumerate(unique_dates):
+        # Create some realistic patterns
+        base_sentiment = 0.0
+        
+        # Add some trend over time (slight positive bias for most stocks)
+        trend = (i / len(unique_dates)) * 0.1
+        
+        # Add some volatility (random walk)
+        volatility = random.gauss(0, 0.3)
+        
+        # Add some stock-specific bias
+        stock_bias = {"AAPL": 0.1, "MSFT": 0.05, "GOOGL": -0.05, "TSLA": 0.2}.get(ticker, 0.0)
+        
+        # Add some frequency-specific patterns
+        if frequency == "daily":
+            # Daily sentiment is more volatile
+            daily_noise = random.gauss(0, 0.2)
+            sentiment = base_sentiment + trend + volatility + stock_bias + daily_noise
+        elif frequency == "weekly":
+            # Weekly sentiment is more stable
+            weekly_noise = random.gauss(0, 0.15)
+            sentiment = base_sentiment + trend + volatility + stock_bias + weekly_noise
+        else:  # monthly
+            # Monthly sentiment is most stable
+            monthly_noise = random.gauss(0, 0.1)
+            sentiment = base_sentiment + trend + volatility + stock_bias + monthly_noise
+        
+        # Clamp sentiment to realistic range (-1 to 1)
+        sentiment = max(-1.0, min(1.0, sentiment))
+        sentiment_scores.append(sentiment)
+    
+    # Create Series with datetime index
+    sentiment_series = pd.Series(sentiment_scores, index=pd.to_datetime(unique_dates))
+    sentiment_series.name = f"{ticker}_{frequency}_sentiment"
+    
+    return sentiment_series
+
+def get_sentiment_scores_by_frequency(ticker, df, frequency, api_key=None, use_fake_data=False):
     """
     Get sentiment scores based on the time series frequency (daily, weekly, monthly).
     
@@ -112,6 +170,7 @@ def get_sentiment_scores_by_frequency(ticker, df, frequency, api_key=None):
         df (pd.DataFrame): DataFrame with datetime index
         frequency (str): Time series frequency ("daily", "weekly", "monthly")
         api_key (str): Alpha Vantage API key (optional)
+        use_fake_data (bool): If True, generate fake data instead of calling API
     
     Returns:
         pd.Series: Sentiment scores indexed by date, aggregated by frequency
@@ -120,6 +179,14 @@ def get_sentiment_scores_by_frequency(ticker, df, frequency, api_key=None):
     valid_frequencies = {"daily", "weekly", "monthly"}
     if frequency not in valid_frequencies:
         raise ValueError(f"Invalid frequency: {frequency}. Must be one of {valid_frequencies}")
+    
+    # Use fake data if requested or if no API key
+    if use_fake_data or not api_key:
+        print(f"🎭 Generating fake {frequency} sentiment data for {ticker}...")
+        print(f"Debug: use_fake_data={use_fake_data}, api_key={bool(api_key)}")
+        result = _generate_fake_sentiment_data(ticker, df, frequency)
+        print(f"Generated {len(result)} sentiment scores")
+        return result
     
     # Get unique dates from dataframe
     unique_dates = df.index.date
