@@ -6,7 +6,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
-from strategies import quality_low_volatility
+from strategies import quality_low_volatility, get_sentiment_scores_by_frequency
 
 # Load environment variables
 load_dotenv()
@@ -102,7 +102,7 @@ def calculate_moving_average(df, window):
     """Calculate moving average for the given window"""
     return df['Close'].rolling(window=window).mean()
 
-def generate_trading_recommendation(df, strategy, symbol="Unknown"):
+def generate_trading_recommendation(df, strategy, symbol="Unknown", frequency="monthly"):
     """Generate trading recommendation based on selected strategy"""
     if strategy == "Quality/Low Volatility":
         try:
@@ -197,6 +197,12 @@ def main():
             help="Choose a trading strategy for generating buy/sell/hold recommendations"
         )
         
+        include_sentiment = st.checkbox(
+            "Include Sentiment Analysis",
+            value=False,
+            help="Analyze news sentiment for the selected time period (requires additional API calls)"
+        )
+        
         st.markdown("---")
         st.markdown("### About")
         st.markdown("This app fetches time series data from Alpha Vantage API and displays it with interactive charts.")
@@ -221,7 +227,7 @@ def main():
                     st.success(f"✅ Successfully fetched {len(df)} {frequency} data points for {symbol}")
                     
                     # Generate trading recommendation
-                    recommendation = generate_trading_recommendation(df, trading_strategy, symbol)
+                    recommendation = generate_trading_recommendation(df, trading_strategy, symbol, frequency)
                     
                     # Display basic statistics
                     col1, col2, col3, col4 = st.columns(4)
@@ -262,6 +268,55 @@ def main():
                     display_rows = 30 if frequency == "daily" else (12 if frequency == "weekly" else 12)
                     st.subheader(f"📋 {frequency.title()} Data Table")
                     st.dataframe(df.tail(display_rows), use_container_width=True)
+                    
+                    # Sentiment Analysis Section
+                    if include_sentiment:
+                        st.markdown("---")
+                        st.subheader("📰 Sentiment Analysis")
+                        
+                        with st.spinner(f"Analyzing {frequency} sentiment for {symbol}..."):
+                            try:
+                                sentiment_scores = get_sentiment_scores_by_frequency(
+                                    symbol, df, frequency, ALPHA_VANTAGE_API_KEY
+                                )
+                                
+                                if not sentiment_scores.empty:
+                                    # Display sentiment metrics
+                                    col1, col2, col3 = st.columns(3)
+                                    
+                                    with col1:
+                                        avg_sentiment = sentiment_scores.mean()
+                                        st.metric("Average Sentiment", f"{avg_sentiment:.3f}")
+                                    
+                                    with col2:
+                                        recent_sentiment = sentiment_scores.tail(5).mean()
+                                        st.metric("Recent Sentiment", f"{recent_sentiment:.3f}")
+                                    
+                                    with col3:
+                                        positive_days = (sentiment_scores > 0.1).sum()
+                                        total_days = len(sentiment_scores)
+                                        st.metric("Positive Days", f"{positive_days}/{total_days}")
+                                    
+                                    # Create sentiment chart
+                                    st.subheader("📊 Sentiment Chart")
+                                    sentiment_fig = px.line(
+                                        x=sentiment_scores.index,
+                                        y=sentiment_scores.values,
+                                        title=f"{symbol} {frequency.title()} Sentiment Scores",
+                                        labels={'x': 'Date', 'y': 'Sentiment Score'}
+                                    )
+                                    sentiment_fig.add_hline(y=0, line_dash="dash", line_color="gray")
+                                    st.plotly_chart(sentiment_fig, use_container_width=True)
+                                    
+                                    # Display sentiment data table
+                                    st.subheader("📋 Sentiment Data")
+                                    st.dataframe(sentiment_scores.to_frame(), use_container_width=True)
+                                    
+                                else:
+                                    st.warning("No sentiment data available for this period")
+                                    
+                            except Exception as e:
+                                st.error(f"Sentiment analysis failed: {str(e)}")
                     
                     # Download option
                     csv = df.to_csv()
